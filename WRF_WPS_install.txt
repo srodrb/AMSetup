@@ -1,0 +1,157 @@
+*
+*
+* Description: 	Instalación del sistema WRF/WPS en un entorno de cálculo distribuido
+*				basado en LandonOS
+*
+* Version: 0.1
+* Revision: none
+* Author: Samuel Rodriguez Bernabeu
+* Organization Universidad de León. Departamento de ing. aeroespacial.
+*			
+*
+
+Estructura del documento:
+	- Rutas, librerías y environmental modules.
+	- Requisitos.
+	- Instalación de suite de compiladores y herramientas de Intel. 
+	- Librerías requeridas por el WRF.
+	- Comprobar la comunicación entre nodos del clúster.
+	- Instalación de MPICH/MPICH2.
+	- Compilación del WRF.
+	- Compilación del WPS.
+	- Compilación de Obsgrid.
+	- Integración de datos estáticos.
+	- Recomendaciones/comentarios adicionales.
+	
+
+0.- Rutas, librerías y environmental modules
+
+	En los clusters las librerías y los compiladores no se instalan de la misma forma en que se haría en un ordenador personal (aunque es perfectamente factible).
+
+	El problema de instalar las librerías de la forma habitual e incluir después las rutas en un fichero de configuración de sistema (por ejemplo bashrc o paths) es que al cargar las librerías en el sistema éstas quedan cargadas para todos los procesos. De esta manera, si nuestro compilador por defecto para C es icc no podremos cargar el compilador de GNU para lanzar otro proceso compilado con este compilador. 
+
+	La solución de facto es emplear 'modules'. Modules permite la creación de ficheros de carga para librerías de sistema 'en bloque'. De esta forma, para lanzar un proceso se cargan antes los módulos necesarios y después se lanza el mismo. Esta metodología garantiza la ejecución sin interferencia entre librerias. 
+
+
+1.- Requisitos
+
+	La compilación de las librerías siguientes puede requerir la instalación y configuración de compiladores, no puedo entrar en detalle porque no tengo conocimiento de las librerías instaladas en el sistema. Las especificaciones dadas en el documento hablan de que el sistema incluye un set de compiladores GNU completo, pero puede que sea necesario instalar complementos como make o incluso herramientas de compresión/descompresión. 
+
+
+2- Instalación de suite de compiladores y herramientas de Intel.
+
+    No es nada recomendable emplear la interfaz gráfica en la instalación porque seguramente requiere librerías de Java y si las instalamos podemos tener un conficto con las que hay corriendo en la máquina.
+
+	El proceso es sencillo siguiendo los pasos detallados en el paquete de instalación. Lo mejor es abrirlo y leer la sección correspondiente al sistema operativo para el que estamos instalando. Generalmente es suficiente con lanzar el ejecutable.
+
+	Los únicos parámetros de configuración que debemos pasar es la ruta de instalación y la clave del producto.
+
+
+3.- Librerías requeridas por el WRF.
+
+	Descargar y compilar las siguientes librerías/programas
+
+		- m4
+		- ranlib
+		- zlib
+		- ar
+		- netcdf
+		- jasper
+		- libpng
+		- HDF5
+
+	Preferiblemente emplearemos el compilador de Intel apropiado, pero no es imprescindible. Esto se puede hacer a mano en cada fichero de configuración o exportando globalmente las variables encargadas del compilador por defecto.
+
+
+4.- Comprobar la comunicación entre los nodos del clúster
+
+	Los nodos del clúster deben comunicarse correctamente. MPI emplea por defecto la comunicación sobre SSH, así que hacemos un SSH desde un nodo a otro cualquiera. 
+	No debe pedirnos confirmación de rsa ni pass si el sistema está correctamente configurado. Si no es el caso, debemos generar las claves públicas de SSH mediante 
+
+	ssh-keygen -t rsa
+
+	y las copiamos usando scp de un nodo a otro, poniéndolas al final del fichero de claves autorizadas.
+
+	Debemos mirar después el fichero hosts (en la mayor parte de los sistemas basados en Linux está en /etc/hosts).
+
+	Puesto que el sistema se rige por el grid engine, no sé si este fichero sólo está contenido en el frontend o ha de estar en todos los nodos.
+
+
+5.- Instalación de MPICH/MPICH2
+
+	Por lo que he podido ver en la literatura, el sistema LandonOS incorpora las librerias de OpenMPI genéricas, por lo que, si queremos usar MPICH (versión de alto rendimiento) tendremos que compilarlas.
+
+	Descargamos el fuente de la web oficial, www.mpich.org/downloads. Puede que existan los binarios precompilados, pero yo siempre los he compilado desde el fuente.
+
+	Especificamos los flags de compilación (es recomendable poner los flags de optimización de la CPU correspondiente, extensiones sse, etc...), la ruta de instalción (no recomiendo ponerlos en la general, y menos en un cluster) y la INTERFAZ hardware.
+
+	Sobre la interfaz, la documentación de MPICH ofrece distintos flags dependiendo del hardware de la máquina y de la topología de la red. Escoger el idóneo. 
+
+	Si se va a emplear el Grid Engine, posiblemente sea más eficiente instalar también hydra, para la gestión de nodos.
+
+
+6.- Compilación de WRF
+
+	Comprobamos que los compiladores están correctamente instalados, configurados y cargados.
+
+	Descargamos tanto el WRF como el WPS en las versiones deseadas desde la web (http://www2.mmm.ucar.edu/wrf/users/download/get_source.html). 
+
+	Exportamos las variables de entorno (o las colocamos en el fichero de terminal correspondiente):
+
+	NETCDF = path
+	WRFIO_NCD_LARGE_FILE_SUPPORT=1
+	J ='-j 8'
+
+	El parámetro j es el número de procesadores que emplearemos en la compilación paralela, por lo que no tiene que ser necesariamente 8, depende de nuestra CPU.
+
+	Configuramos para que se emplee la suite de compiladores de Intel y se instale en la ruta que le especifiquemos (esencial para mantener un control de versiones). El fichero configure tiene muchas más opciones y es posible que necesitemos tocar alguna para que compile correctamente, por ejemplo, en nuestro cluster no funciona con el nivel de optimización más alto, hay que reducirlo. También es interesante pasar las extensiones de optimización propias de la arquitectura.
+
+	Configuramos y compilamos
+
+	./configure 
+
+		Tendremos que seleccionar uno entre los modos de configuración que nos ofrece, en base a las características de nuestro sistema operativo, nuestro hardware y el modelo de ejecución que buscamos (shared memory, MPI,..)
+
+	./compile em_real
+
+
+	Si todo ha ido bien deberíamos tener los ejecutables en el directorio principal de WRF, dependiendo de si hemos compilado para el caso ideal o el real tendremos unos u otros; para el que nos interesa son los siguientes:
+
+		wrf.exe
+		real.exe
+		ndown.exe
+		tc.exe
+
+
+7.- Compilación del WPS
+
+	Configuramos y compilamos desde el directorio de descarga del WPS modificando los parametros del compilador y rutas de las librerías bien mediante la modificación de los ficheros de configuración o bien mediante variables de entorno.
+
+	En caso de querer ejecutar dominios grandes podremos compilarlo de forma que sea posible su posterior ejecución en paralelo marcando las opciones que contengan las keywords MPI o dmpar.
+
+	El proceso debe generar los siguientes ejecutables:
+
+		geogrid.exe
+		ungrib.exe
+		metgrid.exe
+
+	Además de las utilidades en el directorio util.
+
+8.- Compilación de OBSGRID
+
+	Descargamos el fuente del apartado de utilidades de la web de WRF. Si todo lo anterior ha funcionado correctamente, el proceso es simplemente configurar y make.
+
+9.- Integración de datos estáticos
+
+	El WPS genera la descripción geométrica del dominio a partir de datos estáticos. Es necesario descargar estos datos (en la resolución deseada) desdela web: http://www2.mmm.ucar.edu/wrf/OnLineTutorial/Basics/GEOGRID/ter_data.htm.
+
+	En la web existen datos de baja, media y alta resolución. Estos datos han de descomprimirse en el directorio geog. 
+
+
+10.- Recomendationes/comentarios adicionales.
+
+	Puesto que el cluster va a ser usado por terceras personas es importante ser consciente de los permisos que se requerirán para lanzar las tareas. Los ejecutables tienen que estar disponibles para el usuario pero él no debe tener permisos de escritura sobre ellos.
+
+	Lo mismo se aplica a los ficheros de configuración de rutas. Si no se procede mediante el uso de modules, yo recomiendo que el usuario cargue las rutas desde un fichero en el lado del root. La forma elegante de hacer esto es configurar las librerías de forma adecuada, pero esto es problemático en un cluster.
+
+	Puesto que el usuario va a ser capaz de generar grandes volúmenes de datos, debe estar habilitado para ello. Es importante que se tengan permisos suficientes y la limitación en memoria impuesta por el administración del sistema tenga esto en consideración.
